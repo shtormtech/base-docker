@@ -1,0 +1,72 @@
+# UBUNTU
+FROM shtormtech/dotnet-sdk-sonar:core3.1-bionic-jdk8 AS build-env
+
+ARG VERSION
+ARG SONAR_PROJECT_KEY
+ARG SONAR_TOKEN
+ARG SONAR_HOST
+ARG SOURCE_BRANCH
+ARG PULLREQUEST_KEY
+ARG PULLREQUEST_BRANCH
+ARG PULLREQUEST_BASE=master
+ARG PULLREQUEST_PROVIDER=vsts
+ARG PULLREQUEST_INSTANCE_URL
+ARG PULLREQUEST_PROJECT
+ARG PULLREQUEST_REPO
+ARG COVERAGE="/out/testresults/coverage/reports/SonarQube.xml"
+ARG TESTRESULTS="/out/testresults/dockerunittestresults.xml"
+
+RUN printenv && echo VERSION=$VERSION && echo SONAR_TOKEN=$SONAR_TOKEN && echo SONAR_HOST=$SONAR_HOST && echo SOURCE_BRANCH=$SOURCE_BRANCH && echo PULLREQUEST_KEY=$PULLREQUEST_KEY && echo PULLREQUEST_BRANCH=$PULLREQUEST_BRANCH && echo PULLREQUEST_BASE=$PULLREQUEST_BASE && echo PULLREQUEST_INSTANCE_URL=$PULLREQUEST_INSTANCE_URL && echo PULLREQUEST_PROJECT=$PULLREQUEST_PROJECT && echo PULLREQUEST_REPO=$PULLREQUEST_REPO
+
+WORKDIR /app
+
+# switch to root
+USER 0
+RUN mkdir obj
+
+# Copy csproj and restore as distinct layers
+COPY . ./
+
+# Restore packages
+RUN dotnet restore MyProject.sln
+
+# Sonar scanner begin
+RUN if [ "$PULLREQUEST_KEY" != "\$(SYSTEM.PULLREQUEST.PULLREQUESTID)" ]; then \
+echo PullRequest && \
+dotnet sonarscanner begin /k:$SONAR_PROJECT_KEY \
+	/d:sonar.host.url=$SONAR_HOST \
+	/d:sonar.login=$SONAR_TOKEN  \
+	/d:sonar.pullrequest.key=$PULLREQUEST_KEY  \
+	/d:sonar.pullrequest.branch=$PULLREQUEST_BRANCH  \
+	/d:sonar.pullrequest.base=$PULLREQUEST_BASE  \
+	/d:sonar.pullrequest.provider=$PULLREQUEST_PROVIDER  \
+	/d:sonar.pullrequest.vsts.instanceUrl=$PULLREQUEST_INSTANCE_URL  \
+	/d:sonar.pullrequest.vsts.project=$PULLREQUEST_PROJECT \
+	/d:sonar.pullrequest.vsts.repository=$PULLREQUEST_REPO \
+	/d:sonar.coverageReportPaths=$COVERAGE \
+	/d:sonar.cs.vstest.reportsPaths=$TESTRESULTS \
+	/v:$VERSION \
+; else \
+echo Not PullRequest && \
+dotnet sonarscanner begin /k:$SONAR_PROJECT_KEY \
+    /d:sonar.verbose=true \
+	/d:sonar.host.url=$SONAR_HOST \
+	/d:sonar.login=$SONAR_TOKEN  \
+	/d:sonar.branch.name=$SOURCE_BRANCH \
+	/d:sonar.coverageReportPaths=$COVERAGE \
+	/d:sonar.cs.vstest.reportsPaths=$TESTRESULTS \
+	/v:$VERSION \
+; fi
+
+# Start building project
+RUN dotnet build MyProject.sln
+
+# Run unittests and geterate test report
+WORKDIR MyProject.NUnitTests
+RUN dotnet tool install dotnet-reportgenerator-globaltool --tool-path /dotnetglobaltools
+LABEL unittestlayer=true
+RUN dotnet test --logger "trx;LogFileName=dockerunittestresults.xml" /p:CollectCoverage=true /p:CoverletOutputFormat=opencover /p:CoverletOutput=/out/testresults/coverage/ --results-directory /out/testresults
+RUN /dotnetglobaltools/reportgenerator "-reports:/out/testresults/coverage/coverage.opencover.xml" "-targetdir:/out/testresults/coverage/reports" "-reporttypes:HTML;Cobertura;SonarQube"
+
+WORKDIR /app
+RUN dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN

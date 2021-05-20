@@ -8,6 +8,7 @@
     * SonarScanner
 
 # Использование
+Пример использования показан в Dockerfile.use
 *    Для проверки PullRequest
 ``` bash
 RUN dotnet sonarscanner begin \
