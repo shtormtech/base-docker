@@ -1,0 +1,14 @@
+PyYAML==5.1
+requests==2.21.0
+robotframework==3.2.2
+robotframework-angularjs==0.0.9
+robotframework-httplibrary==0.4.2
+robotframework-requests==0.7.1
+robotframework-pythonlibcore==2.1.0
+robotframework-jsonlibrary==0.3.1
+robotframework-seleniumlibrary==4.5.0
+robotframework-testrail==1.0.4
+robotframework-xvfb==1.2.2
+selenium==3.141.00
+xvfbwrapper==0.2.9
+requests-kerberos
